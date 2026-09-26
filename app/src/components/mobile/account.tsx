@@ -1,0 +1,13 @@
+'use client';
+import { useRouter } from 'next/navigation';
+import { ArrowRight, KeyRound, LogOut, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+import { useApp } from './app-provider';
+import { ConfirmSheet } from './confirm-sheet';
+import { DevnetPill, PrimaryButton, Shell, TopBar } from './ui';
+export function Account() {
+  const router = useRouter();
+  const { connected, role, setRole, disconnect, connect, ready, leases, chainMode, walletAddress, chainError } = useApp();
+  const [confirm, setConfirm] = useState(false);
+  return <Shell><TopBar right={<DevnetPill />} /><main className="m-page m-account"><span className="m-kicker">PROFILE</span><h1>Account</h1><div className="m-account-card"><div className="m-account-icon"><KeyRound size={23} /></div><div className="m-account-wallet"><h2>{connected ? chainMode ? 'Wallet connected' : 'Demo wallet connected' : chainMode ? 'Wallet not connected' : 'Demo wallet disconnected'}</h2><p>{connected && chainMode ? `${walletAddress?.slice(0, 6)}…${walletAddress?.slice(-6)}` : chainMode ? 'Connect a wallet to sign Devnet transactions' : 'This session uses simulated actions only'}</p></div></div>{chainError && <p className="m-inline-alert" role="status">{chainError}</p>}{!connected && <PrimaryButton onClick={connect}><KeyRound size={18} /> Connect wallet</PrimaryButton>}<div className="m-account-section"><h2>Your view</h2><p>Switch roles to see the matching lease actions.</p><div className="m-segmented" role="group" aria-label="Account view"><button className={role === 'landlord' ? 'selected' : ''} onClick={() => { setRole('landlord'); router.push('/properties'); }}>Landlord</button><button className={role === 'tenant' ? 'selected' : ''} onClick={() => { setRole('tenant'); router.push('/my-leases'); }}>Tenant</button></div></div><div className="m-account-section"><h2>App status</h2><div className="m-account-row"><ShieldCheck size={19} /><span>{ready ? leases.length : '–'} agreements saved in this browser</span></div><div className="m-account-row"><span className="m-account-dot" /> <span>{chainMode ? 'Actions use the DepositLock program on Devnet.' : 'Actions are simulated in this browser.'}</span></div></div>{connected && <button className="m-account-signout" onClick={() => setConfirm(true)}><LogOut size={19} /> Disconnect wallet <ArrowRight size={17} /></button>}</main><ConfirmSheet open={confirm} onOpenChange={setConfirm} title="Disconnect wallet?" description="Your saved agreements will stay in this browser." action="Disconnect" onConfirm={() => { disconnect(); setConfirm(false); router.push('/'); }} /></Shell>;
+}
