@@ -4,7 +4,8 @@
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
     "fund-demo": "tsx scripts/fund-demo.ts",
-    "verify-demo": "tsx scripts/verify-demo.ts"
+    "verify-demo": "tsx scripts/verify-demo.ts",
+    "balances": "tsx scripts/balances.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
