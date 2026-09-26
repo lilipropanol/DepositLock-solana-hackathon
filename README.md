@@ -2,6 +2,10 @@
 
 DepositLock is a mobile-first prototype for rental deposit escrow. The Next.js app lives in [`app/`](app/); the Solana program and Anchor configuration stay at the repository root.
 
+## Demo
+
+https://github.com/user-attachments/assets/700cd18c-1b71-4015-aae2-43a944afbfc7
+
 ## Run the mobile app
 
 ```bash
