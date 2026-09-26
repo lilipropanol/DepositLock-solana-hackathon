@@ -34,12 +34,16 @@ export class MockClient implements EscrowClient {
   private leaseId = 1;
   private tenantBal = START_BALANCE;
   private landlordBal = START_BALANCE;
+  private arbitratorBal = START_BALANCE;
 
   tenantAddress() {
     return FAKE_TENANT;
   }
   landlordAddress() {
     return FAKE_LANDLORD;
+  }
+  arbitratorAddress() {
+    return "ArbitratorDemo1111111111111111111111111111";
   }
 
   async fetchEscrow() {
@@ -60,7 +64,11 @@ export class MockClient implements EscrowClient {
     this.escrow = {
       tenant: FAKE_TENANT,
       landlord: FAKE_LANDLORD,
+      arbitrator: this.arbitratorAddress(),
       amountLamports: amount,
+      claimedAmountLamports: 0,
+      evidenceHash: "".padStart(64, "0"),
+      status: "active",
       leaseEndTs: p.leaseEndTs,
       disputeWindowSecs: p.disputeWindowSecs,
       leaseId: this.leaseId,
@@ -79,6 +87,59 @@ export class MockClient implements EscrowClient {
     return this.payOutToTenant();
   }
 
+  async submitClaim(amountLamports: number, evidenceHash: Uint8Array) {
+    await delay(300);
+    if (!this.escrow || amountLamports <= 0 || amountLamports > this.escrow.amountLamports) {
+      throw new Error("Claim must be greater than zero and no more than the deposit.");
+    }
+    this.escrow.claimedAmountLamports = amountLamports;
+    this.escrow.evidenceHash = Array.from(evidenceHash, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    this.escrow.status = "claimed";
+    return fakeSignature();
+  }
+
+  async acceptDeduction() {
+    await delay(300);
+    if (!this.escrow || this.escrow.status !== "claimed") throw new Error("No active claim to accept.");
+    this.landlordBal += this.escrow.claimedAmountLamports;
+    this.tenantBal += this.escrow.amountLamports - this.escrow.claimedAmountLamports + RENT;
+    this.escrow = null;
+    this.leaseId += 1;
+    return fakeSignature();
+  }
+
+  async rejectDeduction() {
+    await delay(300);
+    if (!this.escrow || this.escrow.status !== "claimed") throw new Error("No active claim to reject.");
+    this.tenantBal += this.escrow.amountLamports - this.escrow.claimedAmountLamports;
+    this.escrow.amountLamports = this.escrow.claimedAmountLamports;
+    this.escrow.status = "rejected";
+    return fakeSignature();
+  }
+
+  async arbitrate(awardLamports: number) {
+    return this.settle(awardLamports);
+  }
+
+  async settleMutually(splitLamports: number) {
+    return this.settle(splitLamports);
+  }
+
+  private async settle(splitLamports: number) {
+    await delay(300);
+    if (!this.escrow || (this.escrow.status !== "claimed" && this.escrow.status !== "rejected")) {
+      throw new Error("No disputed escrow to settle.");
+    }
+    if (splitLamports < 0 || splitLamports > this.escrow.claimedAmountLamports) {
+      throw new Error("The award cannot exceed the claimed amount.");
+    }
+    this.landlordBal += splitLamports;
+    this.tenantBal += this.escrow.amountLamports - splitLamports + RENT;
+    this.escrow = null;
+    this.leaseId += 1;
+    return fakeSignature();
+  }
+
   /** Both exit paths pay the tenant 100% -- mirrors `close = tenant` on chain. */
   private payOutToTenant(): string {
     if (!this.escrow) throw new Error("No escrow to settle.");
@@ -93,5 +154,6 @@ export class MockClient implements EscrowClient {
     this.leaseId += 1;
     this.tenantBal = START_BALANCE;
     this.landlordBal = START_BALANCE;
+    this.arbitratorBal = START_BALANCE;
   }
 }

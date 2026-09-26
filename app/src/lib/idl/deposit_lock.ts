@@ -14,6 +14,150 @@ export type DepositLock = {
   },
   "instructions": [
     {
+      "name": "acceptDeduction",
+      "discriminator": [
+        75,
+        130,
+        220,
+        51,
+        114,
+        56,
+        225,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "tenant",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "landlord",
+          "writable": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tenant"
+              },
+              {
+                "kind": "account",
+                "path": "landlord"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "arbitrate",
+      "discriminator": [
+        105,
+        91,
+        110,
+        150,
+        216,
+        11,
+        142,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "arbitrator",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "landlord",
+          "writable": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tenant"
+              },
+              {
+                "kind": "account",
+                "path": "landlord"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tenant",
+          "writable": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "award",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "claimRefund",
       "docs": [
         "PATH B -- the landlord did nothing, so the tenant gets their money back.",
@@ -186,8 +330,72 @@ export type DepositLock = {
         {
           "name": "disputeWindowSecs",
           "type": "i64"
+        },
+        {
+          "name": "arbitrator",
+          "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "rejectDeduction",
+      "discriminator": [
+        184,
+        233,
+        139,
+        90,
+        21,
+        164,
+        73,
+        146
+      ],
+      "accounts": [
+        {
+          "name": "tenant",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tenant"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.landlord",
+                "account": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "release",
@@ -264,6 +472,147 @@ export type DepositLock = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "settleMutually",
+      "discriminator": [
+        55,
+        35,
+        86,
+        193,
+        194,
+        98,
+        251,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "tenant",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "landlord",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tenant"
+              },
+              {
+                "kind": "account",
+                "path": "landlord"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "split",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "submitClaim",
+      "discriminator": [
+        163,
+        108,
+        111,
+        46,
+        220,
+        82,
+        77,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "landlord",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.tenant",
+                "account": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "landlord"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "evidenceHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
     }
   ],
   "accounts": [
@@ -301,6 +650,31 @@ export type DepositLock = {
       "code": 6003,
       "name": "mathOverflow",
       "msg": "Arithmetic overflow."
+    },
+    {
+      "code": 6004,
+      "name": "windowNotOpen",
+      "msg": "The lease has not ended yet."
+    },
+    {
+      "code": 6005,
+      "name": "windowClosed",
+      "msg": "The landlord's review window has expired."
+    },
+    {
+      "code": 6006,
+      "name": "invalidClaim",
+      "msg": "Claim must be greater than zero and no more than the deposit."
+    },
+    {
+      "code": 6007,
+      "name": "invalidStatus",
+      "msg": "This escrow is not in a valid state for that action."
+    },
+    {
+      "code": 6008,
+      "name": "awardExceedsClaim",
+      "msg": "The award cannot exceed the claimed amount."
     }
   ],
   "types": [
@@ -346,6 +720,48 @@ export type DepositLock = {
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "arbitrator",
+            "type": "pubkey"
+          },
+          {
+            "name": "claimedAmount",
+            "type": "u64"
+          },
+          {
+            "name": "evidenceHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "escrowStatus"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "escrowStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "active"
+          },
+          {
+            "name": "claimed"
+          },
+          {
+            "name": "rejected"
           }
         ]
       }

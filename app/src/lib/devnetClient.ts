@@ -58,6 +58,9 @@ export class DevnetClient implements EscrowClient {
   landlordAddress() {
     return this.actors.landlord.publicKey.toBase58();
   }
+  arbitratorAddress() {
+    return this.actors.arbitrator.publicKey.toBase58();
+  }
 
   /** Build a Program instance that signs as the given actor. */
   private programAs(signer: Keypair): Program {
@@ -94,7 +97,11 @@ export class DevnetClient implements EscrowClient {
       return {
         tenant: acct.tenant.toBase58(),
         landlord: acct.landlord.toBase58(),
+        arbitrator: acct.arbitrator.toBase58(),
         amountLamports: acct.amount.toNumber(),
+        claimedAmountLamports: acct.claimedAmount.toNumber(),
+        evidenceHash: Buffer.from(acct.evidenceHash).toString("hex"),
+        status: (Object.keys(acct.status)[0] ?? "active") as EscrowState["status"],
         leaseEndTs: acct.leaseEndTs.toNumber(),
         disputeWindowSecs: acct.disputeWindowSecs.toNumber(),
         leaseId: acct.leaseId.toNumber(),
@@ -120,7 +127,8 @@ export class DevnetClient implements EscrowClient {
         new BN(this.actors.leaseId),
         new BN(Math.round(p.amountSol * LAMPORTS_PER_SOL)),
         new BN(p.leaseEndTs),
-        new BN(p.disputeWindowSecs)
+        new BN(p.disputeWindowSecs),
+        new PublicKey(p.arbitrator)
       )
       .accounts({
         tenant: this.actors.tenant.publicKey,
@@ -160,6 +168,56 @@ export class DevnetClient implements EscrowClient {
         landlord: this.actors.landlord.publicKey,
         escrow: this.escrowPda(),
       })
+      .rpc();
+  }
+
+  async submitClaim(amountLamports: number, evidenceHash: Uint8Array): Promise<string> {
+    return this.programAs(this.actors.landlord).methods
+      .submitClaim(new BN(amountLamports), Array.from(evidenceHash))
+      .accounts({ landlord: this.actors.landlord.publicKey, escrow: this.escrowPda() })
+      .rpc();
+  }
+
+  async acceptDeduction(): Promise<string> {
+    return this.programAs(this.actors.tenant).methods
+      .acceptDeduction()
+      .accounts({
+        tenant: this.actors.tenant.publicKey,
+        landlord: this.actors.landlord.publicKey,
+        escrow: this.escrowPda(),
+      })
+      .rpc();
+  }
+
+  async rejectDeduction(): Promise<string> {
+    return this.programAs(this.actors.tenant).methods
+      .rejectDeduction()
+      .accounts({ tenant: this.actors.tenant.publicKey, escrow: this.escrowPda() })
+      .rpc();
+  }
+
+  async arbitrate(awardLamports: number): Promise<string> {
+    return this.programAs(this.actors.arbitrator).methods
+      .arbitrate(new BN(awardLamports))
+      .accounts({
+        arbitrator: this.actors.arbitrator.publicKey,
+        landlord: this.actors.landlord.publicKey,
+        tenant: this.actors.tenant.publicKey,
+        escrow: this.escrowPda(),
+      })
+      .rpc();
+  }
+
+  async settleMutually(splitLamports: number): Promise<string> {
+    const program = this.programAs(this.actors.tenant);
+    return program.methods
+      .settleMutually(new BN(splitLamports))
+      .accounts({
+        tenant: this.actors.tenant.publicKey,
+        landlord: this.actors.landlord.publicKey,
+        escrow: this.escrowPda(),
+      })
+      .signers([this.actors.landlord])
       .rpc();
   }
 

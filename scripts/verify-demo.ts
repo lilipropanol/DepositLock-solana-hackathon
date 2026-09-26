@@ -20,6 +20,7 @@ const LANDLORD = Keypair.fromSeed(Uint8Array.from([
   185, 119, 183, 221, 196, 169, 238, 84, 11, 24, 206, 162, 35, 238, 222, 225,
   255, 35, 103, 100, 63, 249, 243, 55, 220, 158, 193, 77, 155, 193, 186, 107,
 ]));
+const ARBITRATOR = Keypair.fromSeed(Uint8Array.from(Array.from({ length: 32 }, (_, i) => (i * 73 + 19) % 256)));
 
 const PROGRAM_ID = new PublicKey("43NSJwd38N1gKStmQ22ALDni77xRe2XBkLxpVQMmiLE7");
 const RPC = process.env.NEXT_PUBLIC_RPC_URL ?? "https://api.devnet.solana.com";
@@ -60,7 +61,7 @@ async function main() {
 
   console.log("1. Tenant funds the escrow...");
   const sig1 = await programAs(TENANT).methods
-    .initializeAndFund(new BN(LEASE_ID), new BN(DEPOSIT * LAMPORTS_PER_SOL), new BN(Math.floor(Date.now() / 1000)), new BN(WINDOW))
+    .initializeAndFund(new BN(LEASE_ID), new BN(DEPOSIT * LAMPORTS_PER_SOL), new BN(Math.floor(Date.now() / 1000)), new BN(WINDOW), ARBITRATOR.publicKey)
     .accounts({ tenant: TENANT.publicKey, landlord: LANDLORD.publicKey })
     .rpc();
   const locked = await connection.getBalance(escrowPda);

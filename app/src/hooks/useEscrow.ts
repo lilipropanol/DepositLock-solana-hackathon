@@ -90,6 +90,7 @@ export function useEscrow() {
           // is the "Simulate Lease End" step from the demo script.
           leaseEndTs: Math.floor(Date.now() / 1000),
           disputeWindowSecs: windowSecs,
+          arbitrator: client().arbitratorAddress(),
         })
       ),
     [run]

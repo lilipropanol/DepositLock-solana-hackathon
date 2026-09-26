@@ -43,6 +43,7 @@ pub mod deposit_lock {
         amount: u64,
         lease_end_ts: i64,
         dispute_window_secs: i64,
+        arbitrator: Pubkey,
     ) -> Result<()> {
         require!(amount > 0, DepositLockError::InvalidAmount);
         require!(dispute_window_secs > 0, DepositLockError::InvalidWindow);
@@ -55,6 +56,10 @@ pub mod deposit_lock {
         escrow.dispute_window_secs = dispute_window_secs;
         escrow.lease_id = lease_id;
         escrow.bump = ctx.bumps.escrow;
+        escrow.arbitrator = arbitrator;
+        escrow.claimed_amount = 0;
+        escrow.evidence_hash = [0; 32];
+        escrow.status = EscrowStatus::Active;
 
         // Move the deposit from the tenant into the escrow account.
         // A CPI ("cross-program invocation") is this program calling another
@@ -89,11 +94,96 @@ pub mod deposit_lock {
     /// work: it deletes the escrow account and sweeps every lamport in it --
     /// the deposit *and* the rent the tenant originally paid -- to the tenant.
     pub fn release(ctx: Context<Release>) -> Result<()> {
+        require!(
+            ctx.accounts.escrow.status == EscrowStatus::Active,
+            DepositLockError::InvalidStatus
+        );
         msg!(
             "Landlord {} released deposit to tenant {}",
             ctx.accounts.landlord.key(),
             ctx.accounts.tenant.key()
         );
+        Ok(())
+    }
+
+    pub fn submit_claim(
+        ctx: Context<SubmitClaim>,
+        amount: u64,
+        evidence_hash: [u8; 32],
+    ) -> Result<()> {
+        let escrow = &mut ctx.accounts.escrow;
+        let now = Clock::get()?.unix_timestamp;
+        let deadline = escrow
+            .lease_end_ts
+            .checked_add(escrow.dispute_window_secs)
+            .ok_or(DepositLockError::MathOverflow)?;
+
+        require!(now >= escrow.lease_end_ts, DepositLockError::WindowNotOpen);
+        require!(now < deadline, DepositLockError::WindowClosed);
+        require!(amount > 0 && amount <= escrow.amount, DepositLockError::InvalidClaim);
+        require!(escrow.status == EscrowStatus::Active, DepositLockError::InvalidStatus);
+
+        escrow.claimed_amount = amount;
+        escrow.evidence_hash = evidence_hash;
+        escrow.status = EscrowStatus::Claimed;
+        Ok(())
+    }
+
+    pub fn accept_deduction(ctx: Context<AcceptDeduction>) -> Result<()> {
+        let escrow = &ctx.accounts.escrow;
+        require!(escrow.status == EscrowStatus::Claimed, DepositLockError::InvalidStatus);
+        pay_from_escrow(
+            &ctx.accounts.escrow,
+            &ctx.accounts.landlord,
+            escrow.claimed_amount,
+        )?;
+        Ok(())
+    }
+
+    pub fn reject_deduction(ctx: Context<RejectDeduction>) -> Result<()> {
+        let escrow = &mut ctx.accounts.escrow;
+        require!(escrow.status == EscrowStatus::Claimed, DepositLockError::InvalidStatus);
+        let uncontested = escrow
+            .amount
+            .checked_sub(escrow.claimed_amount)
+            .ok_or(DepositLockError::MathOverflow)?;
+        pay_from_escrow(
+            escrow,
+            &ctx.accounts.tenant,
+            uncontested,
+        )?;
+        escrow.amount = escrow.claimed_amount;
+        escrow.status = EscrowStatus::Rejected;
+        Ok(())
+    }
+
+    pub fn arbitrate(ctx: Context<Arbitrate>, award: u64) -> Result<()> {
+        let escrow = &ctx.accounts.escrow;
+        require!(
+            escrow.status == EscrowStatus::Claimed || escrow.status == EscrowStatus::Rejected,
+            DepositLockError::InvalidStatus
+        );
+        require!(award <= escrow.claimed_amount, DepositLockError::AwardExceedsClaim);
+        pay_from_escrow(
+            &ctx.accounts.escrow,
+            &ctx.accounts.landlord,
+            award,
+        )?;
+        Ok(())
+    }
+
+    pub fn settle_mutually(ctx: Context<SettleMutually>, split: u64) -> Result<()> {
+        let escrow = &ctx.accounts.escrow;
+        require!(
+            escrow.status == EscrowStatus::Claimed || escrow.status == EscrowStatus::Rejected,
+            DepositLockError::InvalidStatus
+        );
+        require!(split <= escrow.claimed_amount, DepositLockError::AwardExceedsClaim);
+        pay_from_escrow(
+            &ctx.accounts.escrow,
+            &ctx.accounts.landlord,
+            split,
+        )?;
         Ok(())
     }
 
@@ -117,6 +207,7 @@ pub mod deposit_lock {
     /// supplied.
     pub fn claim_refund(ctx: Context<ClaimRefund>) -> Result<()> {
         let escrow = &ctx.accounts.escrow;
+        require!(escrow.status == EscrowStatus::Active, DepositLockError::InvalidStatus);
         let now = Clock::get()?.unix_timestamp;
 
         // The deadline: lease end + the full review window the landlord had.
@@ -218,6 +309,91 @@ pub struct ClaimRefund<'info> {
     pub escrow: Account<'info, Escrow>,
 }
 
+#[derive(Accounts)]
+pub struct SubmitClaim<'info> {
+    pub landlord: Signer<'info>,
+    #[account(
+        mut,
+        has_one = landlord,
+        seeds = [b"escrow", escrow.tenant.as_ref(), landlord.key().as_ref(), &escrow.lease_id.to_le_bytes()],
+        bump = escrow.bump,
+    )]
+    pub escrow: Account<'info, Escrow>,
+}
+
+#[derive(Accounts)]
+pub struct AcceptDeduction<'info> {
+    #[account(mut)]
+    pub tenant: Signer<'info>,
+    /// CHECK: Checked against escrow.landlord and used as the payout destination.
+    #[account(mut)]
+    pub landlord: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        has_one = tenant,
+        has_one = landlord,
+        seeds = [b"escrow", tenant.key().as_ref(), landlord.key().as_ref(), &escrow.lease_id.to_le_bytes()],
+        bump = escrow.bump,
+        close = tenant,
+    )]
+    pub escrow: Account<'info, Escrow>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RejectDeduction<'info> {
+    #[account(mut)]
+    pub tenant: Signer<'info>,
+    #[account(
+        mut,
+        has_one = tenant,
+        seeds = [b"escrow", tenant.key().as_ref(), escrow.landlord.as_ref(), &escrow.lease_id.to_le_bytes()],
+        bump = escrow.bump,
+    )]
+    pub escrow: Account<'info, Escrow>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Arbitrate<'info> {
+    pub arbitrator: Signer<'info>,
+    /// CHECK: Checked against escrow.landlord and used as the payout destination.
+    #[account(mut)]
+    pub landlord: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        has_one = arbitrator,
+        has_one = landlord,
+        has_one = tenant,
+        seeds = [b"escrow", tenant.key().as_ref(), landlord.key().as_ref(), &escrow.lease_id.to_le_bytes()],
+        bump = escrow.bump,
+        close = tenant,
+    )]
+    pub escrow: Account<'info, Escrow>,
+    /// CHECK: The escrow's recorded tenant receives the remainder on close.
+    #[account(mut)]
+    pub tenant: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SettleMutually<'info> {
+    #[account(mut)]
+    pub tenant: Signer<'info>,
+    #[account(mut)]
+    pub landlord: Signer<'info>,
+    #[account(
+        mut,
+        has_one = tenant,
+        has_one = landlord,
+        seeds = [b"escrow", tenant.key().as_ref(), landlord.key().as_ref(), &escrow.lease_id.to_le_bytes()],
+        bump = escrow.bump,
+        close = tenant,
+    )]
+    pub escrow: Account<'info, Escrow>,
+    pub system_program: Program<'info, System>,
+}
+
 // ---------------------------------------------------------------------------
 // STATE
 // ---------------------------------------------------------------------------
@@ -240,6 +416,36 @@ pub struct Escrow {
     pub dispute_window_secs: i64,
     pub lease_id: u64,
     pub bump: u8,
+    pub arbitrator: Pubkey,
+    pub claimed_amount: u64,
+    pub evidence_hash: [u8; 32],
+    pub status: EscrowStatus,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
+pub enum EscrowStatus {
+    Active,
+    Claimed,
+    Rejected,
+}
+
+fn pay_from_escrow<'info>(
+    escrow: &Account<'info, Escrow>,
+    destination: &AccountInfo<'info>,
+    amount: u64,
+) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
+    let escrow_info = escrow.to_account_info();
+    let escrow_lamports = escrow_info.lamports();
+    require!(escrow_lamports >= amount, DepositLockError::InsufficientFunds);
+    **escrow_info.try_borrow_mut_lamports()? = escrow_lamports - amount;
+    let destination_lamports = destination.lamports();
+    **destination.try_borrow_mut_lamports()? = destination_lamports
+        .checked_add(amount)
+        .ok_or(DepositLockError::MathOverflow)?;
+    Ok(())
 }
 
 #[error_code]
@@ -252,4 +458,16 @@ pub enum DepositLockError {
     WindowStillOpen,
     #[msg("Arithmetic overflow.")]
     MathOverflow,
+    #[msg("The lease has not ended yet.")]
+    WindowNotOpen,
+    #[msg("The landlord's review window has expired.")]
+    WindowClosed,
+    #[msg("Claim must be greater than zero and no more than the deposit.")]
+    InvalidClaim,
+    #[msg("This escrow is not in a valid state for that action.")]
+    InvalidStatus,
+    #[msg("The award cannot exceed the claimed amount.")]
+    AwardExceedsClaim,
+    #[msg("The escrow does not have enough lamports for this payout.")]
+    InsufficientFunds,
 }

@@ -8,6 +8,150 @@
   },
   "instructions": [
     {
+      "name": "accept_deduction",
+      "discriminator": [
+        75,
+        130,
+        220,
+        51,
+        114,
+        56,
+        225,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "tenant",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "landlord",
+          "writable": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tenant"
+              },
+              {
+                "kind": "account",
+                "path": "landlord"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "arbitrate",
+      "discriminator": [
+        105,
+        91,
+        110,
+        150,
+        216,
+        11,
+        142,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "arbitrator",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "landlord",
+          "writable": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tenant"
+              },
+              {
+                "kind": "account",
+                "path": "landlord"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tenant",
+          "writable": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "award",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "claim_refund",
       "docs": [
         "PATH B -- the landlord did nothing, so the tenant gets their money back.",
@@ -180,8 +324,72 @@
         {
           "name": "dispute_window_secs",
           "type": "i64"
+        },
+        {
+          "name": "arbitrator",
+          "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "reject_deduction",
+      "discriminator": [
+        184,
+        233,
+        139,
+        90,
+        21,
+        164,
+        73,
+        146
+      ],
+      "accounts": [
+        {
+          "name": "tenant",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tenant"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.landlord",
+                "account": "Escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "release",
@@ -258,6 +466,147 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "settle_mutually",
+      "discriminator": [
+        55,
+        35,
+        86,
+        193,
+        194,
+        98,
+        251,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "tenant",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "landlord",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tenant"
+              },
+              {
+                "kind": "account",
+                "path": "landlord"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "split",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "submit_claim",
+      "discriminator": [
+        163,
+        108,
+        111,
+        46,
+        220,
+        82,
+        77,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "landlord",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.tenant",
+                "account": "Escrow"
+              },
+              {
+                "kind": "account",
+                "path": "landlord"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.lease_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "evidence_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
     }
   ],
   "accounts": [
@@ -295,6 +644,31 @@
       "code": 6003,
       "name": "MathOverflow",
       "msg": "Arithmetic overflow."
+    },
+    {
+      "code": 6004,
+      "name": "WindowNotOpen",
+      "msg": "The lease has not ended yet."
+    },
+    {
+      "code": 6005,
+      "name": "WindowClosed",
+      "msg": "The landlord's review window has expired."
+    },
+    {
+      "code": 6006,
+      "name": "InvalidClaim",
+      "msg": "Claim must be greater than zero and no more than the deposit."
+    },
+    {
+      "code": 6007,
+      "name": "InvalidStatus",
+      "msg": "This escrow is not in a valid state for that action."
+    },
+    {
+      "code": 6008,
+      "name": "AwardExceedsClaim",
+      "msg": "The award cannot exceed the claimed amount."
     }
   ],
   "types": [
@@ -340,6 +714,48 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "arbitrator",
+            "type": "pubkey"
+          },
+          {
+            "name": "claimed_amount",
+            "type": "u64"
+          },
+          {
+            "name": "evidence_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "EscrowStatus"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Claimed"
+          },
+          {
+            "name": "Rejected"
           }
         ]
       }

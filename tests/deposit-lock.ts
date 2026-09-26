@@ -13,8 +13,10 @@ describe("deposit-lock", () => {
 
   const tenant = Keypair.generate();
   const landlord = Keypair.generate();
+  const arbitrator = Keypair.generate();
   // A completely uninvolved third party, used to prove claim_refund is permissionless.
   const stranger = Keypair.generate();
+  const disputeProgram = program as any;
 
   const DEPOSIT = 0.1 * LAMPORTS_PER_SOL;
   const WINDOW = 5; // seconds. Production would be 1_209_600 (14 days).
@@ -33,12 +35,12 @@ describe("deposit-lock", () => {
   before(async () => {
     // Fund the demo actors from the provider wallet (devnet faucet is rate-limited).
     const tx = new anchor.web3.Transaction();
-    for (const kp of [tenant, landlord, stranger]) {
+    for (const kp of [tenant, landlord, stranger, arbitrator]) {
       tx.add(
         SystemProgram.transfer({
           fromPubkey: provider.wallet.publicKey,
           toPubkey: kp.publicKey,
-          lamports: 0.3 * LAMPORTS_PER_SOL,
+          lamports: 1 * LAMPORTS_PER_SOL,
         })
       );
     }
@@ -47,10 +49,10 @@ describe("deposit-lock", () => {
 
   it("funds an escrow, locking the deposit in a PDA", async () => {
     const leaseId = 1;
-    const now = Math.floor(Date.now() / 1000);
+    const now = Math.floor(Date.now() / 1000) - 1;
 
     await program.methods
-      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(now), new anchor.BN(WINDOW))
+      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(now), new anchor.BN(WINDOW), arbitrator.publicKey)
       .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey })
       .signers([tenant])
       .rpc();
@@ -118,7 +120,7 @@ describe("deposit-lock", () => {
     const farFuture = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365;
 
     await program.methods
-      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(farFuture), new anchor.BN(WINDOW))
+      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(farFuture), new anchor.BN(WINDOW), arbitrator.publicKey)
       .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey })
       .signers([tenant])
       .rpc();
@@ -145,7 +147,7 @@ describe("deposit-lock", () => {
     const farFuture = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365;
 
     await program.methods
-      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(farFuture), new anchor.BN(WINDOW))
+      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(farFuture), new anchor.BN(WINDOW), arbitrator.publicKey)
       .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey })
       .signers([tenant])
       .rpc();
@@ -164,5 +166,89 @@ describe("deposit-lock", () => {
     } catch (err: any) {
       assert.ok(err.toString().length > 0);
     }
+  });
+
+  it("accepts a landlord claim and pays the claim to the landlord", async () => {
+    const leaseId = 4;
+    const now = Math.floor(Date.now() / 1000) - 1;
+    await disputeProgram.methods
+      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(now), new anchor.BN(WINDOW), arbitrator.publicKey)
+      .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey }).signers([tenant]).rpc();
+    await disputeProgram.methods
+      .submitClaim(new anchor.BN(DEPOSIT / 2), Array.from({ length: 32 }, (_, i) => i + 1))
+      .accounts({ landlord: landlord.publicKey, escrow: escrowPda(leaseId) }).signers([landlord]).rpc();
+    await disputeProgram.methods.acceptDeduction()
+      .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey, escrow: escrowPda(leaseId) })
+      .signers([tenant]).rpc();
+    assert.isNull(await provider.connection.getAccountInfo(escrowPda(leaseId)));
+  });
+
+  it("rejects claims from the wrong signer and outside the review window", async () => {
+    const wrongSignerLease = 7;
+    const now = Math.floor(Date.now() / 1000) - 1;
+    await disputeProgram.methods
+      .initializeAndFund(new anchor.BN(wrongSignerLease), new anchor.BN(DEPOSIT), new anchor.BN(now), new anchor.BN(WINDOW), arbitrator.publicKey)
+      .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey }).signers([tenant]).rpc();
+    try {
+      await disputeProgram.methods.submitClaim(new anchor.BN(DEPOSIT / 2), Array(32).fill(1))
+        .accounts({ landlord: stranger.publicKey, escrow: escrowPda(wrongSignerLease) }).signers([stranger]).rpc();
+      assert.fail("only the recorded landlord may claim");
+    } catch (err: any) {
+      assert.ok(err.toString().length > 0);
+    }
+
+    const closedLease = 8;
+    const ended = Math.floor(Date.now() / 1000) - WINDOW - 1;
+    await disputeProgram.methods
+      .initializeAndFund(new anchor.BN(closedLease), new anchor.BN(DEPOSIT), new anchor.BN(ended), new anchor.BN(WINDOW), arbitrator.publicKey)
+      .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey }).signers([tenant]).rpc();
+    try {
+      await disputeProgram.methods.submitClaim(new anchor.BN(DEPOSIT / 2), Array(32).fill(2))
+        .accounts({ landlord: landlord.publicKey, escrow: escrowPda(closedLease) }).signers([landlord]).rpc();
+      assert.fail("claims after the window must be rejected");
+    } catch (err: any) {
+      assert.include(err.toString(), "WindowClosed");
+    }
+  });
+
+  it("rejects a claim, refunds the uncontested amount, then permits arbitration", async () => {
+    const leaseId = 5;
+    const now = Math.floor(Date.now() / 1000) - 1;
+    const claim = DEPOSIT / 2;
+    await disputeProgram.methods
+      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(now), new anchor.BN(WINDOW), arbitrator.publicKey)
+      .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey }).signers([tenant]).rpc();
+    await disputeProgram.methods.submitClaim(new anchor.BN(claim), Array(32).fill(7))
+      .accounts({ landlord: landlord.publicKey, escrow: escrowPda(leaseId) }).signers([landlord]).rpc();
+    await disputeProgram.methods.rejectDeduction()
+      .accounts({ tenant: tenant.publicKey, escrow: escrowPda(leaseId) }).signers([tenant]).rpc();
+    const rejected = await disputeProgram.account.escrow.fetch(escrowPda(leaseId));
+    assert.equal(rejected.amount.toNumber(), claim);
+    await disputeProgram.methods.arbitrate(new anchor.BN(claim / 2))
+      .accounts({ arbitrator: arbitrator.publicKey, landlord: landlord.publicKey, tenant: tenant.publicKey, escrow: escrowPda(leaseId) })
+      .signers([arbitrator]).rpc();
+    assert.isNull(await provider.connection.getAccountInfo(escrowPda(leaseId)));
+  });
+
+  it("requires both signatures for mutual settlement and caps arbitration", async () => {
+    const leaseId = 6;
+    const now = Math.floor(Date.now() / 1000) - 1;
+    await disputeProgram.methods
+      .initializeAndFund(new anchor.BN(leaseId), new anchor.BN(DEPOSIT), new anchor.BN(now), new anchor.BN(WINDOW), arbitrator.publicKey)
+      .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey }).signers([tenant]).rpc();
+    await disputeProgram.methods.submitClaim(new anchor.BN(DEPOSIT / 2), Array(32).fill(9))
+      .accounts({ landlord: landlord.publicKey, escrow: escrowPda(leaseId) }).signers([landlord]).rpc();
+    try {
+      await disputeProgram.methods.arbitrate(new anchor.BN(DEPOSIT))
+        .accounts({ arbitrator: arbitrator.publicKey, landlord: landlord.publicKey, tenant: tenant.publicKey, escrow: escrowPda(leaseId) })
+        .signers([arbitrator]).rpc();
+      assert.fail("arbitration must not exceed the claim");
+    } catch (err: any) {
+      assert.include(err.toString(), "AwardExceedsClaim");
+    }
+    await disputeProgram.methods.settleMutually(new anchor.BN(DEPOSIT / 4))
+      .accounts({ tenant: tenant.publicKey, landlord: landlord.publicKey, escrow: escrowPda(leaseId) })
+      .signers([tenant, landlord]).rpc();
+    assert.isNull(await provider.connection.getAccountInfo(escrowPda(leaseId)));
   });
 });

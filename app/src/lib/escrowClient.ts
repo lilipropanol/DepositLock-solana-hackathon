@@ -12,7 +12,11 @@ export type Phase = "none" | "active" | "review" | "expired";
 export interface EscrowState {
   tenant: string;
   landlord: string;
+  arbitrator: string;
   amountLamports: number;
+  claimedAmountLamports: number;
+  evidenceHash: string;
+  status: "active" | "claimed" | "rejected";
   leaseEndTs: number;
   disputeWindowSecs: number;
   leaseId: number;
@@ -28,17 +32,24 @@ export interface CreateParams {
   amountSol: number;
   leaseEndTs: number;
   disputeWindowSecs: number;
+  arbitrator: string;
 }
 
 export interface EscrowClient {
   readonly isMock: boolean;
   tenantAddress(): string;
   landlordAddress(): string;
+  arbitratorAddress(): string;
   fetchEscrow(): Promise<EscrowState | null>;
   fetchBalances(): Promise<Balances>;
   createAndFund(p: CreateParams): Promise<string>;
   release(): Promise<string>;
   claimRefund(): Promise<string>;
+  submitClaim(amountLamports: number, evidenceHash: Uint8Array): Promise<string>;
+  acceptDeduction(): Promise<string>;
+  rejectDeduction(): Promise<string>;
+  arbitrate(awardLamports: number): Promise<string>;
+  settleMutually(splitLamports: number): Promise<string>;
   /** Fresh actors and a fresh lease id, so the demo can be run again. */
   resetDemo(): Promise<void>;
 }

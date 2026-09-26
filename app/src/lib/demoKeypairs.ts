@@ -31,12 +31,16 @@ const LANDLORD_SEED = Uint8Array.from([
 
 export const TENANT = Keypair.fromSeed(TENANT_SEED);
 export const LANDLORD = Keypair.fromSeed(LANDLORD_SEED);
+export const ARBITRATOR = Keypair.fromSeed(
+  Uint8Array.from(Array.from({ length: 32 }, (_, i) => (i * 73 + 19) % 256))
+);
 
 const LEASE_KEY = "depositlock.leaseId.v1";
 
 export interface DemoActors {
   tenant: Keypair;
   landlord: Keypair;
+  arbitrator: Keypair;
   leaseId: number;
 }
 
@@ -59,7 +63,7 @@ function writeLeaseId(id: number) {
 }
 
 export function loadActors(): DemoActors {
-  return { tenant: TENANT, landlord: LANDLORD, leaseId: readLeaseId() };
+  return { tenant: TENANT, landlord: LANDLORD, arbitrator: ARBITRATOR, leaseId: readLeaseId() };
 }
 
 /**
