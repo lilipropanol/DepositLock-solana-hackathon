@@ -7,7 +7,7 @@ Program (devnet): `43NSJwd38N1gKStmQ22ALDni77xRe2XBkLxpVQMmiLE7`
 ## Setup (everyone, 11:00)
 
 ```bash
-git clone <repo-url> && cd DepositLock
+git clone https://github.com/lilipropanol/DepositLock-solana-hackathon.git && cd DepositLock-solana-hackathon
 npm install
 cd app && npm install && cd ..
 npm run verify-demo        # confirms the chain works
