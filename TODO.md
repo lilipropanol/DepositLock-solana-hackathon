@@ -10,9 +10,16 @@ Program (devnet): `43NSJwd38N1gKStmQ22ALDni77xRe2XBkLxpVQMmiLE7`
 git clone https://github.com/lilipropanol/DepositLock-solana-hackathon.git && cd DepositLock-solana-hackathon
 npm install
 cd app && npm install && cd ..
-npm run verify-demo        # confirms the chain works
+npm run check              # tells you exactly what's missing, per lane
+npm run verify-demo        # confirms the escrow actually works on devnet
 cd app && npm run dev      # localhost:3000
 ```
+
+`npm run check` is safe to run any time and changes nothing. Lanes A and C only
+need Node — Rust, Solana CLI and Anchor are Lane B only.
+
+No `.env.local`? Fine, it falls back to the public devnet RPC. Ask for the Helius
+URL if you want your own quota.
 
 ---
 
